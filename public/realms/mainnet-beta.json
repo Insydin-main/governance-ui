@@ -1,5 +1,18 @@
 [
   {
+    "symbol": "XGIRLS",
+    "displayName": "Ex Girls",
+    "bannerImage": "/realms/insydin/img/ex_logo.png",
+    "programId": "GovER5Lthms3bLBqWub97yVrMmEogzX7xNjdXpPPCVZw",
+    "realmId": "Gc5ZgPLRYiJSwNMxbfpwPJRwvtt9sdQgBZQRjzjrVUsk",
+    "website": "https://insydin.io/",
+    "shortDescription": "111 Unique And Fully Original Limited Edition Collection Ex Girls Are Here On Solana Powered By Insydin",
+    "keywords": "111 Unique And Fully Original Limited Edition Collection Ex Girls Are Here On Solana Powered By Insydin",
+    "twitter": "@insydin",
+    "ogImage": "https://www.svgrepo.com/show/367750/x.svg",
+    "sortRank": 3
+  },
+  {
     "symbol": "CAS",
     "displayName": "Cyborg Ape Society",
     "programId": "GovER5Lthms3bLBqWub97yVrMmEogzX7xNjdXpPPCVZw",
