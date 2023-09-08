@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import React, { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import * as yup from 'yup'
 import { isFormValid } from '@utils/formValidation'
 import { UiInstruction } from '@utils/uiTypes/proposalCreationTypes'
@@ -9,14 +9,13 @@ import { ProgramAccount } from '@solana/spl-governance'
 import { serializeInstructionToBase64 } from '@solana/spl-governance'
 import { AccountType, AssetAccount } from '@utils/uiTypes/assets'
 import useWalletOnePointOh from '@hooks/useWalletOnePointOh'
-import InstructionForm, {
-  InstructionInput,
-  InstructionInputType,
-} from '../FormCreator'
+import InstructionForm, { InstructionInput } from '../FormCreator'
+import { InstructionInputType } from '../inputInstructionType'
 import { NewProposalContext } from '../../../new'
 import {
   AggregatorAccount,
   SwitchboardProgram,
+  LeaseAccount,
 } from '@switchboard-xyz/solana.js'
 import useLegacyConnectionContext from '@hooks/useLegacyConnectionContext'
 import {
@@ -85,6 +84,26 @@ const SwitchboardFundOracle = ({
         program,
         form.oraclePublicKey
       )
+
+      const [leaseAccount, leaseAccountData] = await LeaseAccount.load(
+        program,
+        oracleAccountData.queuePubkey,
+        oracle.publicKey
+      )
+      if (
+        leaseAccountData.withdrawAuthority.toBase58() ===
+        wallet.publicKey.toBase58()
+      ) {
+        const transferWithdrawAuthIx = leaseAccount.setAuthorityInstruction(
+          wallet.publicKey,
+          {
+            newAuthority: form.governedAccount.extensions.transferAddress!,
+          }
+        )
+        prerequsieInstructionsSigners.push(...transferWithdrawAuthIx.signers)
+        prerequisiteInstructions.push(...transferWithdrawAuthIx.ixns)
+      }
+
       if (
         oracleAccountData.authority.toBase58() === wallet.publicKey.toBase58()
       ) {
@@ -155,6 +174,7 @@ const SwitchboardFundOracle = ({
       additionalSerializedInstructions: additionalSerializedInstructions,
       isValid,
       governance: form.governedAccount?.governance,
+      chunkBy: 1,
     }
     return obj
   }

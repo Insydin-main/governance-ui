@@ -43,6 +43,7 @@ import {
   useRealmCouncilMintInfoQuery,
 } from '@hooks/queries/mintInfo'
 import { useConnection } from '@solana/wallet-adapter-react'
+import { useVsrGovpower } from '@hooks/queries/plugins/vsr'
 
 interface DepositBox {
   mintPk: PublicKey
@@ -53,7 +54,7 @@ interface DepositBox {
 const unlockedTypes = ['none']
 
 const LockTokensAccount: React.FC<{
-  tokenOwnerRecordPk: string | string[] | undefined
+  tokenOwnerRecordPk: PublicKey
   children: React.ReactNode
 }> = ({ tokenOwnerRecordPk, children }) => {
   const realm = useRealmQuery().data?.result
@@ -63,19 +64,25 @@ const LockTokensAccount: React.FC<{
   const { realmInfo } = useRealm()
   const [isLockModalOpen, setIsLockModalOpen] = useState(false)
   const client = useVotePluginsClientStore((s) => s.state.vsrClient)
+  const registrar = useVotePluginsClientStore(
+    (s) => s.state.voteStakeRegistryRegistrar
+  )
+  const isZeroMultiplierConfig = !registrar?.votingMints.filter(
+    (x) => !x.maxExtraLockupVoteWeightScaledFactor.isZero()
+  ).length
+
   const [reducedDeposits, setReducedDeposits] = useState<DepositBox[]>([])
   const ownDeposits = useDepositStore((s) => s.state.deposits)
   const [deposits, setDeposits] = useState<DepositWithMintAccount[]>([])
-  const [votingPower, setVotingPower] = useState<BN>(new BN(0))
+  const votingPower = useVsrGovpower().result?.result ?? new BN(0)
   const [votingPowerFromDeposits, setVotingPowerFromDeposits] = useState<BN>(
     new BN(0)
   )
   const [isOwnerOfDeposits, setIsOwnerOfDeposits] = useState(true)
 
-  const lol = useMemo(() => new PublicKey(tokenOwnerRecordPk as string), [
-    tokenOwnerRecordPk,
-  ])
-  const { data: tokenOwnerRecord } = useTokenOwnerRecordByPubkeyQuery(lol)
+  const { data: tokenOwnerRecord } = useTokenOwnerRecordByPubkeyQuery(
+    tokenOwnerRecordPk
+  )
   const tokenOwnerRecordWalletPk =
     tokenOwnerRecord?.result?.account.governingTokenOwner
 
@@ -104,11 +111,7 @@ const LockTokensAccount: React.FC<{
         publicKey &&
         client
       ) {
-        const {
-          deposits,
-          votingPower,
-          votingPowerFromDeposits,
-        } = await getDeposits({
+        const { deposits, votingPowerFromDeposits } = await getDeposits({
           realmPk: realm.pubkey,
           communityMintPk: realm.account.communityMint,
           walletPk: tokenOwnerRecordWalletPk
@@ -147,12 +150,10 @@ const LockTokensAccount: React.FC<{
           return curr
         }, [] as DepositBox[])
         setVotingPowerFromDeposits(votingPowerFromDeposits)
-        setVotingPower(votingPower)
         setDeposits(deposits)
         setReducedDeposits(reducedDeposits)
       } else if (!wallet?.connected) {
         setVotingPowerFromDeposits(new BN(0))
-        setVotingPower(new BN(0))
         setDeposits([])
         setReducedDeposits([])
       }
@@ -201,9 +202,7 @@ const LockTokensAccount: React.FC<{
           depositMint,
           publicKey
         )
-        setIsOwnerOfDeposits(
-          tokenOwnerRecordAddress.toBase58() === tokenOwnerRecordPk
-        )
+        setIsOwnerOfDeposits(tokenOwnerRecordAddress.equals(tokenOwnerRecordPk))
       }
       getTokenOwnerRecord()
     }
@@ -368,20 +367,23 @@ const LockTokensAccount: React.FC<{
                   ?.map((x, idx) => (
                     <DepositCard deposit={x} key={idx}></DepositCard>
                   ))}
-                <div className="border border-fgd-4 flex flex-col items-center justify-center p-6 rounded-lg">
-                  <LightningBoltIcon className="h-8 mb-2 text-primary-light w-8" />
-                  <p className="flex text-center pb-6">
-                    Increase your voting power by<br></br> locking your tokens.
-                  </p>
-                  <Button onClick={() => setIsLockModalOpen(true)}>
-                    <div className="flex items-center">
-                      <LockClosedIcon className="h-5 mr-1.5 w-5" />
-                      <span>Lock Tokens</span>
-                    </div>
-                  </Button>
-                </div>
+                {!isZeroMultiplierConfig && (
+                  <div className="border border-fgd-4 flex flex-col items-center justify-center p-6 rounded-lg">
+                    <LightningBoltIcon className="h-8 mb-2 text-primary-light w-8" />
+                    <p className="flex text-center pb-6">
+                      Increase your voting power by<br></br> locking your
+                      tokens.
+                    </p>
+                    <Button onClick={() => setIsLockModalOpen(true)}>
+                      <div className="flex items-center">
+                        <LockClosedIcon className="h-5 mr-1.5 w-5" />
+                        <span>Lock Tokens</span>
+                      </div>
+                    </Button>
+                  </div>
+                )}
               </div>
-            ) : (
+            ) : !isZeroMultiplierConfig ? (
               <div className="border border-fgd-4 flex flex-col items-center justify-center p-6 rounded-lg mb-3">
                 <LightningBoltIcon className="h-8 mb-2 text-primary-light w-8" />
                 <p className="flex text-center pb-6">
@@ -394,7 +396,7 @@ const LockTokensAccount: React.FC<{
                   </div>
                 </Button>
               </div>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="border border-fgd-4 flex flex-col items-center justify-center p-6 rounded-lg">

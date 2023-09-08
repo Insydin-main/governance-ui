@@ -11,6 +11,7 @@ import {
   Unknown,
   AssetType,
   Domains,
+  Stake,
 } from '@models/treasury/Asset'
 
 import TokenList from './TokenList'
@@ -20,13 +21,12 @@ import OtherAssetsList from './OtherAssetsList'
 import {
   isToken,
   isSol,
-  isNFTCollection,
   isMint,
   isPrograms,
   isRealmAuthority,
   isUnknown,
   isDomain,
-  isTokenOwnerRecord,
+  isStake,
 } from '../typeGuards'
 
 import { PublicKey } from '@solana/web3.js'
@@ -36,6 +36,9 @@ import TokenIcon from '@components/treasuryV2/icons/TokenIcon'
 import { useTokensMetadata } from '@hooks/queries/tokenMetadata'
 import { useRealmQuery } from '@hooks/queries/realm'
 import { useRealmConfigQuery } from '@hooks/queries/realmConfig'
+import useTreasuryAddressForGovernance from '@hooks/useTreasuryAddressForGovernance'
+import { useDigitalAssetsByOwner } from '@hooks/queries/digitalAssets'
+import { SUPPORT_CNFTS } from '@constants/flags'
 
 export type Section = 'tokens' | 'nfts' | 'others'
 
@@ -45,13 +48,14 @@ function isTokenLike(asset: Asset): asset is Token | Sol {
 
 function isOther(
   asset: Asset
-): asset is Mint | Programs | Unknown | Domains | RealmAuthority {
+): asset is Mint | Programs | Unknown | Domains | RealmAuthority | Stake {
   return (
     isMint(asset) ||
     isPrograms(asset) ||
     isUnknown(asset) ||
     isRealmAuthority(asset) ||
-    isDomain(asset)
+    isDomain(asset) ||
+    isStake(asset)
   )
 }
 
@@ -62,6 +66,7 @@ interface Props {
   selectedAssetId?: string | null
   onSelectAsset?(asset: Asset): void
   onToggleExpandSection?(section: Section): void
+  governance: PublicKey | undefined
 }
 
 export default function AssetList(props: Props) {
@@ -125,29 +130,28 @@ export default function AssetList(props: Props) {
       }
       setTokens(newTokens)
     }
-    if (data) {
+    if (data && data?.length) {
       getTokenData()
     }
   }, [tokensFromProps, data])
 
-  const nfts = props.assets.filter(isNFTCollection).sort((a, b) => {
-    if (b.name && !a.name) {
-      return 1
-    } else if (!b.name && a.name) {
-      return -1
-    } else {
-      return b.count.comparedTo(a.count)
-    }
-  })
+  const { result: treasury } = useTreasuryAddressForGovernance(props.governance)
+  const { data: governanceNfts } = useDigitalAssetsByOwner(props.governance)
+  const { data: treasuryNfts } = useDigitalAssetsByOwner(treasury)
 
-  const tokenOwnerRecordsFromProps = useMemo(
-    () => props.assets.filter(isTokenOwnerRecord),
-    [props.assets]
+  const nfts = useMemo(
+    () =>
+      governanceNfts && treasuryNfts
+        ? [...governanceNfts, ...treasuryNfts]
+            .flat()
+            .filter((x) => SUPPORT_CNFTS || !x.compression.compressed)
+        : undefined,
+    [governanceNfts, treasuryNfts]
   )
 
   // NOTE possible source of bugs, state wont update if props do.
   const [others, setOthers] = useState<
-    (Mint | Programs | Unknown | Domains | RealmAuthority)[]
+    (Mint | Programs | Unknown | Domains | RealmAuthority | Stake)[]
   >(othersFromProps)
   const [itemsToHide, setItemsToHide] = useState<string[]>([])
   useEffect(() => {
@@ -169,6 +173,7 @@ export default function AssetList(props: Props) {
         | Unknown
         | Domains
         | RealmAuthority
+        | Stake
       )[] = []
       for await (const token of othersFromProps) {
         if (isMint(token)) {
@@ -199,13 +204,13 @@ export default function AssetList(props: Props) {
 
   const diplayingMultipleAssetTypes =
     (tokens.length > 0 ? 1 : 0) +
-      (nfts.length > 0 ? 1 : 0) +
+      ((nfts?.length ?? 0) > 0 ? 1 : 0) +
       (others.length > 0 ? 1 : 0) >
     1
 
   return (
     <div className={cx(props.className, 'relative', 'space-y-6')}>
-      {props.assets.length === 0 && (
+      {props.assets.length === 0 && (nfts?.length ?? 0) === 0 && (
         <div className="p-4 text-center text-sm text-fgd-1">
           This wallet contains no assets
         </div>
@@ -220,13 +225,11 @@ export default function AssetList(props: Props) {
           onToggleExpand={() => props.onToggleExpandSection?.('tokens')}
         />
       )}
-      {nfts.length > 0 && (
+      {nfts && nfts.length > 0 && props.governance !== undefined && (
         <NFTList
+          governance={props.governance}
           disableCollapse={!diplayingMultipleAssetTypes}
           expanded={props.expandedSections?.includes('nfts')}
-          nfts={nfts}
-          selectedAssetId={props.selectedAssetId}
-          onSelect={props.onSelectAsset}
           onToggleExpand={() => props.onToggleExpandSection?.('nfts')}
         />
       )}
@@ -241,13 +244,11 @@ export default function AssetList(props: Props) {
           itemsToHide={itemsToHide}
         />
       )}
-      {tokenOwnerRecordsFromProps.length > 0 && (
+      {props.governance !== undefined && (
         <TokenOwnerRecordsList
+          governance={props.governance}
           disableCollapse={false}
           expanded={true}
-          assets={tokenOwnerRecordsFromProps}
-          selectedAssetId={props.selectedAssetId}
-          onSelect={props.onSelectAsset}
           onToggleExpand={() => props.onToggleExpandSection?.('others')}
         />
       )}

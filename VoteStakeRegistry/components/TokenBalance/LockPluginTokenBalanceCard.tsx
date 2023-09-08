@@ -26,6 +26,7 @@ import {
   useRealmCommunityMintInfoQuery,
   useRealmCouncilMintInfoQuery,
 } from '@hooks/queries/mintInfo'
+import { useVsrGovpower } from '@hooks/queries/plugins/vsr'
 
 const LockPluginTokenBalanceCard = ({
   proposal,
@@ -93,11 +94,7 @@ const LockPluginTokenBalanceCard = ({
     <>
       <div className="flex items-center justify-between">
         <h3 className="mb-0">My governance power</h3>
-        <Link
-          href={fmtUrlWithCluster(
-            `/dao/${symbol}/account/${tokenOwnerRecordPk}`
-          )}
-        >
+        <Link href={fmtUrlWithCluster(`/dao/${symbol}/account/me`)}>
           <a
             className={`default-transition flex items-center text-fgd-2 text-sm transition-all hover:text-fgd-3 ${
               !connected || !tokenOwnerRecordPk
@@ -171,7 +168,7 @@ const TokenDepositLock = ({
   const wallet = useWalletOnePointOh()
   const connected = !!wallet?.connected
   const deposits = useDepositStore((s) => s.state.deposits)
-  const votingPower = useDepositStore((s) => s.state.votingPower)
+  const votingPower = useVsrGovpower().result?.result ?? new BN(0)
   const votingPowerFromDeposits = useDepositStore(
     (s) => s.state.votingPowerFromDeposits
   )
@@ -223,7 +220,7 @@ const TokenDepositLock = ({
     if (availableTokens != '0' || hasTokensDeposited || hasTokensInWallet) {
       setHasGovPower(true)
     }
-  }, [availableTokens, hasTokensDeposited, hasTokensInWallet])
+  }, [availableTokens, hasTokensDeposited, hasTokensInWallet, setHasGovPower])
 
   const canShowAvailableTokensMessage = hasTokensInWallet && connected
   const tokensToShow =
@@ -250,7 +247,7 @@ const TokenDepositLock = ({
           />
         </div>
       ) : null}
-      {votingPower.toNumber() > 0 && (
+      {!votingPower.isZero() && (
         <div className="flex space-x-4 items-center mt-4">
           <VotingPowerBox
             votingPower={votingPower}

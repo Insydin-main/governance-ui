@@ -1,13 +1,13 @@
 import { AccountType, AssetAccount } from '@utils/uiTypes/assets'
 import { Instructions, PackageEnum } from '@utils/uiTypes/proposalCreationTypes'
 import useGovernanceAssetsStore from 'stores/useGovernanceAssetsStore'
-import useRealm from './useRealm'
 import { HELIUM_VSR_PLUGINS_PKS, VSR_PLUGIN_PKS } from '../constants/plugins'
 import { useRealmQuery } from './queries/realm'
 import { useRealmConfigQuery } from './queries/realmConfig'
 import { useRouter } from 'next/router'
 import { useRealmGovernancesQuery } from './queries/governance'
 import { useMemo } from 'react'
+import { useLegacyVoterWeight } from './queries/governancePower'
 
 type Package = {
   name: string
@@ -44,18 +44,18 @@ export default function useGovernanceAssets() {
   const realm = useRealmQuery().data?.result
   const config = useRealmConfigQuery().data?.result
   const { symbol } = useRouter().query
-  const { ownVoterWeight } = useRealm()
+  const { result: ownVoterWeight } = useLegacyVoterWeight()
 
   const governedTokenAccounts: AssetAccount[] = useGovernanceAssetsStore(
     (s) => s.governedTokenAccounts
   )
 
   const assetAccounts = useGovernanceAssetsStore((s) =>
-    s.assetAccounts.filter((x) => x.type !== AccountType.AuxiliaryToken)
+    s.assetAccounts.filter((x) => x.type !== AccountType.AUXILIARY_TOKEN)
   )
   const auxiliaryTokenAccounts = useGovernanceAssetsStore(
     (s) => s.assetAccounts
-  ).filter((x) => x.type === AccountType.AuxiliaryToken)
+  ).filter((x) => x.type === AccountType.AUXILIARY_TOKEN)
   const currentPluginPk = config?.account.communityTokenConfig.voterWeightAddin
   const governancesQuery = useRealmGovernancesQuery()
   const governancesArray = useMemo(() => governancesQuery.data ?? [], [
@@ -68,7 +68,7 @@ export default function useGovernanceAssets() {
       assetAccounts
         .filter((x) => types.find((t) => t === x.type))
         .some((govAcc) =>
-          ownVoterWeight.canCreateProposal(govAcc.governance.account.config)
+          ownVoterWeight?.canCreateProposal(govAcc.governance.account.config)
         )
     )
   }
@@ -85,7 +85,7 @@ export default function useGovernanceAssets() {
     )
     return (
       governance &&
-      ownVoterWeight.canCreateProposal(governance?.account?.config)
+      ownVoterWeight?.canCreateProposal(governance?.account?.config)
     )
   })
 
@@ -100,7 +100,7 @@ export default function useGovernanceAssets() {
   const canUseAnyInstruction =
     realm &&
     governancesArray.some((gov) =>
-      ownVoterWeight.canCreateProposal(gov.account.config)
+      ownVoterWeight?.canCreateProposal(gov.account.config)
     )
 
   const realmAuth =
@@ -109,7 +109,7 @@ export default function useGovernanceAssets() {
       (x) => x.pubkey.toBase58() === realm.account.authority?.toBase58()
     )
   const canUseAuthorityInstruction =
-    realmAuth && ownVoterWeight.canCreateProposal(realmAuth?.account.config)
+    realmAuth && ownVoterWeight?.canCreateProposal(realmAuth?.account.config)
 
   const governedSPLTokenAccounts = governedTokenAccounts.filter(
     (x) => x.type === AccountType.TOKEN
@@ -120,11 +120,6 @@ export default function useGovernanceAssets() {
   const governedNativeAccounts = governedTokenAccounts.filter(
     (x) => x.type === AccountType.SOL
   )
-  const nftsGovernedTokenAccounts = governedTokenAccounts.filter(
-    (govTokenAcc) =>
-      govTokenAcc.type === AccountType.NFT ||
-      govTokenAcc.type === AccountType.SOL
-  )
   const canUseTokenTransferInstruction = governedTokenAccountsWithoutNfts.some(
     (acc) => {
       const governance = governancesArray.find(
@@ -132,7 +127,7 @@ export default function useGovernanceAssets() {
       )
       return (
         governance &&
-        ownVoterWeight.canCreateProposal(governance?.account?.config)
+        ownVoterWeight?.canCreateProposal(governance?.account?.config)
       )
     }
   )
@@ -145,10 +140,6 @@ export default function useGovernanceAssets() {
   //
   // Packages are visible by default
   const packages: Packages = {
-    [PackageEnum.Castle]: {
-      name: 'Castle',
-      image: '/img/castle.png',
-    },
     [PackageEnum.Common]: {
       name: 'Common',
     },
@@ -156,26 +147,15 @@ export default function useGovernanceAssets() {
       name: 'Dual Finance',
       image: '/img/dual-logo.png',
     },
-    [PackageEnum.Everlend]: {
-      name: 'Everlend',
-      image: '/img/everlend.png',
-    },
     [PackageEnum.Foresight]: {
       name: 'Foresight',
       isVisible: symbol === 'FORE',
       image: '/img/foresight.png',
     },
-    [PackageEnum.Friktion]: {
-      name: 'Friktion',
-      image: '/img/friktion.png',
-    },
+
     [PackageEnum.GatewayPlugin]: {
       name: 'Gateway Plugin',
       image: '/img/civic.svg',
-    },
-    [PackageEnum.GoblinGold]: {
-      name: 'Goblin Gold',
-      image: '/img/goblingold.png',
     },
     [PackageEnum.Identity]: {
       name: 'Identity',
@@ -207,10 +187,6 @@ export default function useGovernanceAssets() {
       name: 'Solend',
       image: '/img/solend.png',
     },
-    [PackageEnum.Streamflow]: {
-      name: 'Streamflow',
-      image: '/img/streamflow.png',
-    },
     [PackageEnum.Switchboard]: {
       name: 'Switchboard',
       image: '/img/switchboard.png',
@@ -232,23 +208,6 @@ export default function useGovernanceAssets() {
   //
   // If isVisible is not set, it is equal to canUseAnyInstruction
   const instructionsMap: InstructionsMap = {
-    /*
-       ██████  █████  ███████ ████████ ██      ███████
-      ██      ██   ██ ██         ██    ██      ██
-      ██      ███████ ███████    ██    ██      █████
-      ██      ██   ██      ██    ██    ██      ██
-       ██████ ██   ██ ███████    ██    ███████ ███████
-    */
-
-    [Instructions.DepositIntoCastle]: {
-      name: 'Deposit into Vault',
-      packageId: PackageEnum.Castle,
-    },
-    [Instructions.WithdrawFromCastle]: {
-      name: 'Withdraw from Vault',
-      packageId: PackageEnum.Castle,
-    },
-
     /*
         ██████  ██████  ███    ███ ███    ███  ██████  ███    ██
        ██      ██    ██ ████  ████ ████  ████ ██    ██ ████   ██
@@ -294,6 +253,10 @@ export default function useGovernanceAssets() {
       name: 'Deactivate validator stake',
       packageId: PackageEnum.Common,
     },
+    [Instructions.DelegateStake]: {
+      name: 'Delegate Stake Account',
+      packageId: PackageEnum.Common,
+    },
     [Instructions.DifferValidatorStake]: {
       name: 'Differ validator stake',
       // Not to be used for now
@@ -322,7 +285,7 @@ export default function useGovernanceAssets() {
       isVisible:
         realm &&
         governancesArray.some((g) =>
-          ownVoterWeight.canCreateProposal(g.account.config)
+          ownVoterWeight?.canCreateProposal(g.account.config)
         ),
       packageId: PackageEnum.Common,
     },
@@ -362,6 +325,10 @@ export default function useGovernanceAssets() {
       name: 'Set Mint Authority',
       packageId: PackageEnum.Common,
     },
+    [Instructions.SplitStake]: {
+      name: 'Split Stake Validator',
+      packageId: PackageEnum.Common,
+    },
     /*
       ██████  ██    ██  █████  ██          ███████ ██ ███    ██  █████  ███    ██  ██████ ███████
       ██   ██ ██    ██ ██   ██ ██          ██      ██ ████   ██ ██   ██ ████   ██ ██      ██
@@ -375,6 +342,11 @@ export default function useGovernanceAssets() {
       isVisible: canUseTransferInstruction,
       packageId: PackageEnum.Dual,
     },
+    [Instructions.DualFinanceGso]: {
+      name: 'Lockup Staking Option',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
+    },
     [Instructions.DualFinanceLiquidityStakingOption]: {
       name: 'Liquidity Staking Option',
       isVisible: canUseTransferInstruction,
@@ -385,12 +357,17 @@ export default function useGovernanceAssets() {
       isVisible: canUseTransferInstruction,
       packageId: PackageEnum.Dual,
     },
-    [Instructions.DualFinanceExercise]: {
-      name: 'Exercise',
+    [Instructions.DualFinanceExerciseStakingOption]: {
+      name: 'Exercise Staking Option',
       isVisible: canUseTransferInstruction,
       packageId: PackageEnum.Dual,
     },
-    [Instructions.DualFinanceWithdraw]: {
+    [Instructions.DualFinanceGsoWithdraw]: {
+      name: 'Lockup Staking Option Withdraw',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
+    },
+    [Instructions.DualFinanceStakingOptionWithdraw]: {
       name: 'Withdraw',
       isVisible: canUseTransferInstruction,
       packageId: PackageEnum.Dual,
@@ -400,22 +377,25 @@ export default function useGovernanceAssets() {
       isVisible: canUseTransferInstruction,
       packageId: PackageEnum.Dual,
     },
-
-    /*
-      ███████ ██    ██ ███████ ██████  ██      ███████ ███    ██ ██████
-      ██      ██    ██ ██      ██   ██ ██      ██      ████   ██ ██   ██
-      █████   ██    ██ █████   ██████  ██      █████   ██ ██  ██ ██   ██
-      ██       ██  ██  ██      ██   ██ ██      ██      ██  ██ ██ ██   ██
-      ███████   ████   ███████ ██   ██ ███████ ███████ ██   ████ ██████
-    */
-
-    [Instructions.EverlendDeposit]: {
-      name: 'Deposit Funds',
-      packageId: PackageEnum.Everlend,
+    [Instructions.DualFinanceDelegate]: {
+      name: 'Delegate',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
     },
-    [Instructions.EverlendWithdraw]: {
-      name: 'Withdraw Funds',
-      packageId: PackageEnum.Everlend,
+    [Instructions.DualFinanceDelegateWithdraw]: {
+      name: 'Withdraw Vote Deposit',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
+    },
+    [Instructions.DualFinanceVoteDeposit]: {
+      name: 'Vote Deposit',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
+    },
+    [Instructions.DualFinanceVote]: {
+      name: 'Vote',
+      isVisible: canUseTransferInstruction,
+      packageId: PackageEnum.Dual,
     },
 
     /*
@@ -449,48 +429,6 @@ export default function useGovernanceAssets() {
     [Instructions.ForesightSetMarketMetadata]: {
       name: 'Set Market Metadata',
       packageId: PackageEnum.Foresight,
-    },
-
-    /*
-      ███████ ██████  ██ ██   ██ ████████ ██  ██████  ███    ██
-      ██      ██   ██ ██ ██  ██     ██    ██ ██    ██ ████   ██
-      █████   ██████  ██ █████      ██    ██ ██    ██ ██ ██  ██
-      ██      ██   ██ ██ ██  ██     ██    ██ ██    ██ ██  ██ ██
-      ██      ██   ██ ██ ██   ██    ██    ██  ██████  ██   ████
-    */
-
-    [Instructions.ClaimPendingDeposit]: {
-      name: 'Claim Volt Tokens',
-      packageId: PackageEnum.Friktion,
-    },
-    [Instructions.ClaimPendingWithdraw]: {
-      name: 'Claim Pending Withdraw',
-      packageId: PackageEnum.Friktion,
-    },
-    [Instructions.DepositIntoVolt]: {
-      name: 'Deposit into Volt',
-      packageId: PackageEnum.Friktion,
-    },
-    [Instructions.WithdrawFromVolt]: {
-      name: 'Withdraw from Volt',
-      packageId: PackageEnum.Friktion,
-    },
-
-    /*
-       ██████   ██████  ██████  ██      ██ ███    ██  ██████   ██████  ██      ██████
-      ██       ██    ██ ██   ██ ██      ██ ████   ██ ██       ██    ██ ██      ██   ██
-      ██   ███ ██    ██ ██████  ██      ██ ██ ██  ██ ██   ███ ██    ██ ██      ██   ██
-      ██    ██ ██    ██ ██   ██ ██      ██ ██  ██ ██ ██    ██ ██    ██ ██      ██   ██
-       ██████   ██████  ██████  ███████ ██ ██   ████  ██████   ██████  ███████ ██████
-    */
-
-    [Instructions.DepositIntoGoblinGold]: {
-      name: 'Deposit',
-      packageId: PackageEnum.GoblinGold,
-    },
-    [Instructions.WithdrawFromGoblinGold]: {
-      name: 'Withdraw',
-      packageId: PackageEnum.GoblinGold,
     },
 
     /*
@@ -596,6 +534,16 @@ export default function useGovernanceAssets() {
     },
     [Instructions.MangoV4GroupEdit]: {
       name: 'Edit Group',
+      packageId: PackageEnum.MangoMarketV4,
+      isVisible: canUseAnyInstruction,
+    },
+    [Instructions.MangoV4AdminWithdrawTokenFees]: {
+      name: 'Withdraw Token Fees',
+      packageId: PackageEnum.MangoMarketV4,
+      isVisible: canUseAnyInstruction,
+    },
+    [Instructions.MangoV4WithdrawPerpFees]: {
+      name: 'Withdraw Perp Fees',
       packageId: PackageEnum.MangoMarketV4,
       isVisible: canUseAnyInstruction,
     },
@@ -764,23 +712,6 @@ export default function useGovernanceAssets() {
     },
 
     /*
-      ███████ ████████ ██████  ███████  █████  ███    ███ ███████ ██       ██████  ██     ██
-      ██         ██    ██   ██ ██      ██   ██ ████  ████ ██      ██      ██    ██ ██     ██
-      ███████    ██    ██████  █████   ███████ ██ ████ ██ █████   ██      ██    ██ ██  █  ██
-           ██    ██    ██   ██ ██      ██   ██ ██  ██  ██ ██      ██      ██    ██ ██ ███ ██
-      ███████    ██    ██   ██ ███████ ██   ██ ██      ██ ██      ███████  ██████   ███ ███
-    */
-
-    // [Instructions.CancelStream]: {
-    //   name: 'Cancel Vesting Contract',
-    //   packageId: PackageEnum.Streamflow,
-    // },
-    // [Instructions.CreateStream]: {
-    //   name: 'Create Vesting Contract',
-    //   packageId: PackageEnum.Streamflow,
-    // },
-
-    /*
       ███████ ██     ██ ██ ████████  ██████ ██   ██ ██████   ██████   █████  ██████  ██████
       ██      ██     ██ ██    ██    ██      ██   ██ ██   ██ ██    ██ ██   ██ ██   ██ ██   ██
       ███████ ██  █  ██ ██    ██    ██      ███████ ██████  ██    ██ ███████ ██████  ██   ██
@@ -788,16 +719,12 @@ export default function useGovernanceAssets() {
       ███████  ███ ███  ██    ██     ██████ ██   ██ ██████   ██████  ██   ██ ██   ██ ██████
     */
 
-    [Instructions.SwitchboardAdmitOracle]: {
-      name: 'Admit Oracle to Queue',
-      packageId: PackageEnum.Switchboard,
-    },
-    [Instructions.SwitchboardRevokeOracle]: {
-      name: 'Remove Oracle from Queue',
-      packageId: PackageEnum.Switchboard,
-    },
     [Instructions.SwitchboardFundOracle]: {
       name: 'Fund Oracle',
+      packageId: PackageEnum.Switchboard,
+    },
+    [Instructions.WithdrawFromOracle]: {
+      name: 'Withdraw from Oracle',
       packageId: PackageEnum.Switchboard,
     },
 
@@ -851,42 +778,21 @@ export default function useGovernanceAssets() {
     )
   }
 
-  return useMemo(
-    () => ({
-      assetAccounts,
-      auxiliaryTokenAccounts,
-      availableInstructions,
-      availablePackages,
-      canMintRealmCouncilToken,
-      canUseAuthorityInstruction,
-      canUseMintInstruction,
-      canUseProgramUpgradeInstruction,
-      canUseTransferInstruction,
-      getPackageTypeById,
-      governancesArray,
-      governedNativeAccounts,
-      governedSPLTokenAccounts,
-      governedTokenAccounts,
-      governedTokenAccountsWithoutNfts,
-      nftsGovernedTokenAccounts,
-    }),
-    [
-      assetAccounts,
-      auxiliaryTokenAccounts,
-      availableInstructions,
-      availablePackages,
-      canMintRealmCouncilToken,
-      canUseAuthorityInstruction,
-      canUseMintInstruction,
-      canUseProgramUpgradeInstruction,
-      canUseTransferInstruction,
-      getPackageTypeById,
-      governancesArray,
-      governedNativeAccounts,
-      governedSPLTokenAccounts,
-      governedTokenAccounts,
-      governedTokenAccountsWithoutNfts,
-      nftsGovernedTokenAccounts,
-    ]
-  )
+  return {
+    assetAccounts,
+    auxiliaryTokenAccounts,
+    availableInstructions,
+    availablePackages,
+    canMintRealmCouncilToken,
+    canUseAuthorityInstruction,
+    canUseMintInstruction,
+    canUseProgramUpgradeInstruction,
+    canUseTransferInstruction,
+    getPackageTypeById,
+    governancesArray,
+    governedNativeAccounts,
+    governedSPLTokenAccounts,
+    governedTokenAccounts,
+    governedTokenAccountsWithoutNfts,
+  }
 }
