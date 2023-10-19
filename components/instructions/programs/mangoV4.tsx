@@ -1,6 +1,8 @@
 import {
   MANGO_V4_ID,
   MangoClient,
+  OracleProvider,
+  USDC_MINT,
   toUiDecimals,
 } from '@blockworks-foundation/mango-v4'
 import AdvancedOptionsDropdown from '@components/NewRealmWizard/components/AdvancedOptionsDropdown'
@@ -10,12 +12,12 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js'
 import EmptyWallet, {
   getSuggestedCoinTier,
   compareObjectsAndGetDifferentKeys,
-  ListingArgs,
+  FlatListingArgs,
   ListingArgsFormatted,
   getOracle,
   getBestMarket,
   EditTokenArgsFormatted,
-  isPythOracle,
+  FlatEditArgs,
   getFormattedListingPresets,
 } from '@utils/Mango/listingTools'
 import { secondsToHours } from 'date-fns'
@@ -26,8 +28,13 @@ import tokenPriceService, {
   TokenInfoWithoutDecimals,
 } from '@utils/services/tokenPrice'
 import {
+  LISTING_PRESETS,
   LISTING_PRESETS_KEYS,
+  LISTING_PRESETS_PYTH,
+  MidPriceImpact,
   coinTiersToNames,
+  getMidPriceImpacts,
+  getProposedTier,
 } from '@blockworks-foundation/mango-v4-settings/lib/helpers/listingTools'
 import { tryParseKey } from '@tools/validators/pubkey'
 import Loading from '@components/Loading'
@@ -225,7 +232,7 @@ const instructions = () => ({
       const [info, proposedOracle, args] = await Promise.all([
         displayArgs(connection, data),
         getOracle(connection, oracle),
-        getDataObjectFlattened<ListingArgs>(connection, data),
+        getDataObjectFlattened<FlatListingArgs>(connection, data),
       ])
       const liqudityTier = await getSuggestedCoinTier(
         proposedMint.toBase58(),
@@ -244,8 +251,9 @@ const instructions = () => ({
         ? getFormattedListingValues({
             tokenIndex: args.tokenIndex,
             name: args.name,
+            oracle: args.oracle,
             ...suggestedPreset,
-          } as ListingArgs)
+          })
         : ({} as ListingArgsFormatted)
 
       const invalidKeys: (keyof ListingArgsFormatted)[] = Object.keys(
@@ -692,7 +700,7 @@ const instructions = () => ({
         const [mangoGroup, info, args] = await Promise.all([
           client.getGroup(group),
           displayArgs(connection, data),
-          getDataObjectFlattened<any>(connection, data),
+          getDataObjectFlattened<FlatEditArgs>(connection, data),
         ])
         const mint = [...mangoGroup.mintInfosMapByMint.values()].find((x) =>
           x.publicKey.equals(mintInfo)
@@ -708,57 +716,74 @@ const instructions = () => ({
 
         const parsedArgs: Partial<EditTokenArgsFormatted> = {
           tokenIndex: args.tokenIndex,
-          tokenName: args.name,
-          oracleConfidenceFilter: args['oracleConfigOpt.confFilter']
-            ? (args['oracleConfigOpt.confFilter'] * 100)?.toFixed(2)
-            : undefined,
+          tokenName: args.nameOpt,
+          oracleConfidenceFilter:
+            args['oracleConfigOpt.confFilter'] !== undefined
+              ? (args['oracleConfigOpt.confFilter'] * 100)?.toFixed(2)
+              : undefined,
           oracleMaxStalenessSlots: args['oracleConfigOpt.maxStalenessSlots'],
-          interestRateUtilizationPoint0: args['interestRateParamsOpt.util0']
-            ? (args['interestRateParamsOpt.util0'] * 100)?.toFixed(2)
-            : undefined,
-          interestRatePoint0: args['interestRateParamsOpt.rate0']
-            ? (args['interestRateParamsOpt.rate0'] * 100)?.toFixed(2)
-            : undefined,
-          interestRateUtilizationPoint1: args['interestRateParamsOpt.util1']
-            ? (args['interestRateParamsOpt.util1'] * 100)?.toFixed(2)
-            : undefined,
-          interestRatePoint1: args['interestRateParamsOpt.rate1']
-            ? (args['interestRateParamsOpt.rate1'] * 100)?.toFixed(2)
-            : undefined,
-          maxRate: args['interestRateParamsOpt.maxRate']
-            ? (args['interestRateParamsOpt.maxRate'] * 100)?.toFixed(2)
-            : undefined,
-          adjustmentFactor: args['interestRateParamsOpt.adjustmentFactor']
-            ? (args['interestRateParamsOpt.adjustmentFactor'] * 100).toFixed(2)
-            : undefined,
-          loanFeeRate: args.loanFeeRateOpt
-            ? (args.loanFeeRateOpt * 10000)?.toFixed(2)
-            : undefined,
-          loanOriginationFeeRate: args.loanOriginationFeeRateOpt
-            ? (args.loanOriginationFeeRateOpt * 10000)?.toFixed(2)
-            : undefined,
+          interestRateUtilizationPoint0:
+            args['interestRateParamsOpt.util0'] !== undefined
+              ? (args['interestRateParamsOpt.util0'] * 100)?.toFixed(2)
+              : undefined,
+          interestRatePoint0:
+            args['interestRateParamsOpt.rate0'] !== undefined
+              ? (args['interestRateParamsOpt.rate0'] * 100)?.toFixed(2)
+              : undefined,
+          interestRateUtilizationPoint1:
+            args['interestRateParamsOpt.util1'] !== undefined
+              ? (args['interestRateParamsOpt.util1'] * 100)?.toFixed(2)
+              : undefined,
+          interestRatePoint1:
+            args['interestRateParamsOpt.rate1'] !== undefined
+              ? (args['interestRateParamsOpt.rate1'] * 100)?.toFixed(2)
+              : undefined,
+          maxRate:
+            args['interestRateParamsOpt.maxRate'] !== undefined
+              ? (args['interestRateParamsOpt.maxRate'] * 100)?.toFixed(2)
+              : undefined,
+          adjustmentFactor:
+            args['interestRateParamsOpt.adjustmentFactor'] !== undefined
+              ? (args['interestRateParamsOpt.adjustmentFactor'] * 100).toFixed(
+                  2
+                )
+              : undefined,
+          loanFeeRate:
+            args.loanFeeRateOpt !== undefined
+              ? (args.loanFeeRateOpt * 10000)?.toFixed(2)
+              : undefined,
+          loanOriginationFeeRate:
+            args.loanOriginationFeeRateOpt !== undefined
+              ? (args.loanOriginationFeeRateOpt * 10000)?.toFixed(2)
+              : undefined,
           maintAssetWeight: args.maintAssetWeightOpt?.toFixed(2),
           initAssetWeight: args.initAssetWeightOpt?.toFixed(2),
           maintLiabWeight: args.maintLiabWeightOpt?.toFixed(2),
           initLiabWeight: args.initLiabWeightOpt?.toFixed(2),
-          liquidationFee: args['liquidationFeeOpt']
-            ? (args['liquidationFeeOpt'] * 100)?.toFixed(2)
-            : undefined,
-          minVaultToDepositsRatio: args['minVaultToDepositsRatioOpt']
-            ? (args['minVaultToDepositsRatioOpt'] * 100)?.toFixed(2)
-            : undefined,
-          netBorrowLimitPerWindowQuote: args['netBorrowLimitPerWindowQuoteOpt']
-            ? toUiDecimals(args['netBorrowLimitPerWindowQuoteOpt'], 6)
-            : undefined,
-          netBorrowLimitWindowSizeTs: args.netBorrowLimitWindowSizeTsOpt
-            ? secondsToHours(args.netBorrowLimitWindowSizeTsOpt)
-            : undefined,
-          borrowWeightScaleStartQuote: args.borrowWeightScaleStartQuoteOpt
-            ? toUiDecimals(args.borrowWeightScaleStartQuoteOpt, 6)
-            : undefined,
-          depositWeightScaleStartQuote: args.depositWeightScaleStartQuoteOpt
-            ? toUiDecimals(args.depositWeightScaleStartQuoteOpt, 6)
-            : undefined,
+          liquidationFee:
+            args['liquidationFeeOpt'] !== undefined
+              ? (args['liquidationFeeOpt'] * 100)?.toFixed(2)
+              : undefined,
+          minVaultToDepositsRatio:
+            args['minVaultToDepositsRatioOpt'] !== undefined
+              ? (args['minVaultToDepositsRatioOpt'] * 100)?.toFixed(2)
+              : undefined,
+          netBorrowLimitPerWindowQuote:
+            args['netBorrowLimitPerWindowQuoteOpt'] !== undefined
+              ? toUiDecimals(args['netBorrowLimitPerWindowQuoteOpt'], 6)
+              : undefined,
+          netBorrowLimitWindowSizeTs:
+            args.netBorrowLimitWindowSizeTsOpt !== undefined
+              ? secondsToHours(args.netBorrowLimitWindowSizeTsOpt)
+              : undefined,
+          borrowWeightScaleStartQuote:
+            args.borrowWeightScaleStartQuoteOpt !== undefined
+              ? toUiDecimals(args.borrowWeightScaleStartQuoteOpt, 6)
+              : undefined,
+          depositWeightScaleStartQuote:
+            args.depositWeightScaleStartQuoteOpt !== undefined
+              ? toUiDecimals(args.depositWeightScaleStartQuoteOpt, 6)
+              : undefined,
           groupInsuranceFund:
             args.groupInsuranceFundOpt !== null
               ? args.groupInsuranceFundOpt
@@ -768,18 +793,59 @@ const instructions = () => ({
           tokenConditionalSwapTakerFeeRate:
             args.tokenConditionalSwapTakerFeeRateOpt,
           flashLoanDepositFeeRate: args.flashLoanDepositFeeRateOpt,
+          reduceOnly:
+            args.reduceOnlyOpt !== undefined
+              ? REDUCE_ONLY_OPTIONS[args.reduceOnlyOpt].name
+              : undefined,
         }
 
         if (mint) {
+          const bank = mangoGroup.getFirstBankByMint(mint)
           mintData = tokenPriceService.getTokenInfo(mint.toBase58())
-          const oracle = mangoGroup.banksMapByMint.get(mint.toBase58())![0]!
-            .oracle
-          const isPyth = await isPythOracle(connection, oracle)
-          liqudityTier = await getSuggestedCoinTier(mint.toBase58(), !!isPyth)
+          const isPyth = bank?.oracleProvider === OracleProvider.Pyth
+          const midPriceImpacts = getMidPriceImpacts(mangoGroup.pis)
 
-          const suggestedPreset = getFormattedListingPresets(!!isPyth)[
-            liqudityTier.tier!
-          ]
+          const PRESETS = isPyth ? LISTING_PRESETS_PYTH : LISTING_PRESETS
+
+          const tokenToPriceImpact = midPriceImpacts
+            .filter((x) => x.avg_price_impact_percent < 1)
+            .reduce(
+              (acc: { [key: string]: MidPriceImpact }, val: MidPriceImpact) => {
+                if (
+                  !acc[val.symbol] ||
+                  val.target_amount > acc[val.symbol].target_amount
+                ) {
+                  acc[val.symbol] = val
+                }
+                return acc
+              },
+              {}
+            )
+
+          const priceImpact = tokenToPriceImpact[getApiTokenName(bank.name)]
+
+          const suggestedTier = getProposedTier(
+            PRESETS,
+            priceImpact?.target_amount,
+            bank.oracleProvider === OracleProvider.Pyth
+          )
+
+          liqudityTier = !mint.equals(USDC_MINT)
+            ? {
+                tier: suggestedTier,
+                priceImpact: priceImpact
+                  ? priceImpact.avg_price_impact_percent.toString()
+                  : '',
+              }
+            : {
+                tier: 'ULTRA_PREMIUM',
+                priceImpact: '0',
+              }
+
+          const suggestedPreset = getFormattedListingPresets(
+            !!isPyth,
+            bank.nativeDeposits().mul(bank.price).toNumber()
+          )[liqudityTier.tier!]
           suggestedUntrusted = liqudityTier.tier === 'UNTRUSTED'
 
           const suggestedFormattedPreset:
@@ -788,9 +854,10 @@ const instructions = () => ({
             ? {
                 ...getFormattedListingValues({
                   tokenIndex: args.tokenIndex,
-                  name: args.name,
+                  name: args.nameOpt,
+                  oracle: args.oracleOpt,
                   ...suggestedPreset,
-                } as ListingArgs),
+                }),
                 groupInsuranceFund: suggestedPreset.insuranceFound,
               }
             : {}
@@ -842,6 +909,15 @@ const instructions = () => ({
                   {coinTiersToNames[liqudityTier.tier]} check params carefully
                 </h3>
               )}
+            <div className="py-4">
+              <div className="flex mb-2">
+                <div className="w-3 h-3 bg-orange mr-2"></div> - Proposed values
+              </div>
+              <div className="flex">
+                <div className="w-3 h-3 bg-green mr-2"></div> - Suggested by
+                liqudity
+              </div>
+            </div>
             <div className="border-b mb-4 pb-4 space-y-3">
               <DisplayNullishProperty
                 label="Token index"
@@ -1059,12 +1135,17 @@ const instructions = () => ({
                 value={parsedArgs.flashLoanDepositFeeRate}
                 suggestedVal={invalidFields.flashLoanDepositFeeRate}
               />
+              <DisplayNullishProperty
+                label="Reduce only"
+                value={parsedArgs.reduceOnly}
+              />
             </div>
             <h3>Raw values</h3>
             <div>{info}</div>
           </div>
         )
       } catch (e) {
+        console.log(e)
         const info = await displayArgs(connection, data)
 
         try {
@@ -1350,10 +1431,11 @@ const DisplayListingProperty = ({
   </div>
 )
 
-const getFormattedListingValues = (args: ListingArgs) => {
+const getFormattedListingValues = (args: FlatListingArgs) => {
   const formattedArgs: ListingArgsFormatted = {
     tokenIndex: args.tokenIndex,
     tokenName: args.name,
+    oracle: args.oracle?.toBase58(),
     oracleConfidenceFilter: (args['oracleConfig.confFilter'] * 100).toFixed(2),
     oracleMaxStalenessSlots: args['oracleConfig.maxStalenessSlots'],
     interestRateUtilizationPoint0: (
@@ -1416,3 +1498,10 @@ const REDUCE_ONLY_OPTIONS = [
 //   const preimage = `${nameSpace}:${name}`
 //   return Buffer.from(sha256.digest(preimage)).slice(0, 8)
 // }
+
+const getApiTokenName = (bankName: string) => {
+  if (bankName === 'ETH (Portal)') {
+    return 'ETH'
+  }
+  return bankName
+}

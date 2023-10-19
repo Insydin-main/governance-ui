@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 import {
   fetchTokenOwnerRecordByPubkey,
+  useTokenOwnerRecordByPubkeyQuery,
   useUserCommunityTokenOwnerRecord,
   useUserCouncilTokenOwnerRecord,
 } from './tokenOwnerRecord'
@@ -44,6 +45,15 @@ export const getVanillaGovpower = async (
     tokenOwnerRecord
   )
   return torAccount.result
+    ? torAccount.result.account.governingTokenDepositAmount
+    : new BN(0)
+}
+
+export const useVanillaGovpower = (tokenOwnerRecordPk: PublicKey) => {
+  const { data: torAccount } = useTokenOwnerRecordByPubkeyQuery(
+    tokenOwnerRecordPk
+  )
+  return torAccount?.result
     ? torAccount.result.account.governingTokenDepositAmount
     : new BN(0)
 }
@@ -92,6 +102,19 @@ export const getNftGovpower = async (
   return power
 }
 
+export const findPluginName = (programId: PublicKey | undefined) =>
+  programId === undefined
+    ? ('vanilla' as const)
+    : VSR_PLUGIN_PKS.includes(programId.toString())
+    ? ('VSR' as const)
+    : HELIUM_VSR_PLUGINS_PKS.includes(programId.toString())
+    ? 'HeliumVSR'
+    : NFT_PLUGINS_PKS.includes(programId.toString())
+    ? 'NFT'
+    : GATEWAY_PLUGINS_PKS.includes(programId.toString())
+    ? 'gateway'
+    : 'unknown'
+
 export const determineVotingPowerType = async (
   connection: Connection,
   realmPk: PublicKey,
@@ -106,17 +129,7 @@ export const determineVotingPowerType = async (
       ? config.result?.account.communityTokenConfig.voterWeightAddin
       : config.result?.account.councilTokenConfig.voterWeightAddin
 
-  return programId === undefined
-    ? ('vanilla' as const)
-    : VSR_PLUGIN_PKS.includes(programId.toString())
-    ? ('VSR' as const)
-    : HELIUM_VSR_PLUGINS_PKS.includes(programId.toString())
-    ? 'HeliumVSR'
-    : NFT_PLUGINS_PKS.includes(programId.toString())
-    ? 'NFT'
-    : GATEWAY_PLUGINS_PKS.includes(programId.toString())
-    ? 'gateway'
-    : 'unknown'
+  return findPluginName(programId)
 }
 
 export const useGovernancePowerAsync = (
