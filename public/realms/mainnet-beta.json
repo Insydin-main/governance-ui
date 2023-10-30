@@ -76,6 +76,15 @@
     "github": "https://github.com/blockworks-foundation/"
   },
   {
+    "symbol": "XAND",
+    "category": "defi",
+    "displayName": "Xandeum DAO",
+    "programId": "DcG2PZTnj8s4Pnmp7xJswniCskckU5E6XsrKuyD7NYFK",
+    "realmId": "CFprdZRYitjPYEDUQKDQZwao1jcRcU1z1GsFspMpN8Ci",
+    "communityMint": "2j437Lt84XvysJiYbXTSJfAMy26Et9HiVGFvGFp8nYWH",
+    "ogImage": "https://xandeum.com/wp-content/uploads/2023/05/Xandeum-Logo-Standard.png"
+  },
+  {
     "symbol": "HPC",
     "displayName": "CryptoHelp",
     "programId": "GovER5Lthms3bLBqWub97yVrMmEogzX7xNjdXpPPCVZw",
@@ -95,6 +104,20 @@
     "programId": "GqTPL6qRf5aUuqscLh8Rg2HTxPUXfhhAXDptTLhp1t2J",
     "realmId": "7CWXhWsMXbfx8caHcpCbSQKDpsaLNu65YoBLoGfogzk6",
     "communityMint": "DYg9LHzbhk9pg7h3Zhda2CW1berCp7NZQYxUEW6Eex35",
+    "ogImage": "https://i.imgur.com/448n6bC.jpg",
+    "shortDescription": "Every market, all the power, none of the fuss. Simplifying decentralized finance through easy-to-use products and developer tools.",
+    "website": "https://mango.markets",
+    "keywords": "Mango Markets, REALM, Governance, Serum, SRM, Serum DEX, DEFI, Decentralized Finance, Decentralised Finance, Crypto, ERC20, Ethereum, Decentralize, Solana, SOL, SPL, Cross-Chain, Trading, Fastest, Fast, SerumBTC, SerumUSD, SRM Tokens, SPL Tokens",
+    "twitter": "@mangomarkets",
+    "discord": "https://discord.com/invite/2uwjsBc5yw",
+    "github": "https://github.com/blockworks-foundation/"
+  },
+  {
+    "symbol": "MNGO-GM",
+    "category": "defi",
+    "displayName": "Mango Game Master",
+    "programId": "GqTPL6qRf5aUuqscLh8Rg2HTxPUXfhhAXDptTLhp1t2J",
+    "realmId": "6JFaFouiN4ssPc38ey1hXKSxyFWZzZy9w5Xt5xLzeozm",
     "ogImage": "https://i.imgur.com/448n6bC.jpg",
     "shortDescription": "Every market, all the power, none of the fuss. Simplifying decentralized finance through easy-to-use products and developer tools.",
     "website": "https://mango.markets",
