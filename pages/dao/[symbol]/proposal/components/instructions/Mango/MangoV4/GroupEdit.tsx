@@ -17,6 +17,8 @@ import { getChangedValues, getNullOrTransform } from '@utils/mangoV4Tools'
 import AdvancedOptionsDropdown from '@components/NewRealmWizard/components/AdvancedOptionsDropdown'
 import Switch from '@components/Switch'
 import useWalletOnePointOh from '@hooks/useWalletOnePointOh'
+import ProgramSelector from '@components/Mango/ProgramSelector'
+import useProgramSelector from '@components/Mango/useProgramSelector'
 
 const keyToLabel = {
   admin: 'Admin',
@@ -30,6 +32,7 @@ const keyToLabel = {
   feesSwapMangoAccount: 'Fees Swap Mango Account',
   feesMngoTokenIndex: 'Fees MNGO Token Index',
   feesExpiryInterval: 'Fees Expiry Interval',
+  collateralFeeInterval: 'Collateral Fee Interval',
 }
 
 type GroupEditForm = {
@@ -46,6 +49,8 @@ type GroupEditForm = {
   feesMngoTokenIndex: number | null
   feesExpiryInterval: number | null
   holdupTime: number
+  allowedFastListingsPerInterval: number | null
+  collateralFeeInterval: number | null
 }
 
 const defaultFormValues: GroupEditForm = {
@@ -62,6 +67,8 @@ const defaultFormValues: GroupEditForm = {
   feesMngoTokenIndex: 0,
   feesExpiryInterval: 0,
   holdupTime: 0,
+  allowedFastListingsPerInterval: 0,
+  collateralFeeInterval: 0,
 }
 
 const GroupEdit = ({
@@ -72,7 +79,11 @@ const GroupEdit = ({
   governance: ProgramAccount<Governance> | null
 }) => {
   const wallet = useWalletOnePointOh()
-  const { mangoClient, mangoGroup, getAdditionalLabelInfo } = UseMangoV4()
+  const programSelectorHook = useProgramSelector()
+  const { mangoClient, mangoGroup, getAdditionalLabelInfo } = UseMangoV4(
+    programSelectorHook.program?.val,
+    programSelectorHook.program?.group
+  )
   const { assetAccounts } = useGovernanceAssets()
   const solAccounts = assetAccounts.filter(
     (x) =>
@@ -122,7 +133,13 @@ const GroupEdit = ({
           getNullOrTransform(values.feesMngoBonusRate, null, Number),
           getNullOrTransform(values.feesSwapMangoAccount, PublicKey),
           getNullOrTransform(values.feesMngoTokenIndex, null, Number),
-          getNullOrTransform(values.feesExpiryInterval, BN)
+          getNullOrTransform(values.feesExpiryInterval, BN),
+          getNullOrTransform(
+            values.allowedFastListingsPerInterval,
+            null,
+            Number
+          ),
+          getNullOrTransform(values.collateralFeeInterval, BN)
         )
         .accounts({
           group: mangoGroup!.publicKey,
@@ -195,6 +212,9 @@ const GroupEdit = ({
         feesSwapMangoAccount: mangoGroup!.buybackFeesSwapMangoAccount?.toBase58(),
         feesMngoTokenIndex: mangoGroup!.mngoTokenIndex,
         feesExpiryInterval: mangoGroup!.buybackFeesExpiryInterval?.toNumber(),
+        allowedFastListingsPerInterval: mangoGroup!
+          .allowedFastListingsPerInterval,
+        collateralFeeInterval: mangoGroup!.collateralFeeInterval.toNumber(),
       }
       setForm((prevForm) => ({
         ...prevForm,
@@ -307,10 +327,29 @@ const GroupEdit = ({
       inputType: 'number',
       name: 'feesExpiryInterval',
     },
+    {
+      label: keyToLabel['allowedFastListingsPerInterval'],
+      subtitle: getAdditionalLabelInfo('allowedFastListingsPerInterval'),
+      initialValue: form.allowedFastListingsPerInterval,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'allowedFastListingsPerInterval',
+    },
+    {
+      label: keyToLabel['collateralFeeInterval'],
+      subtitle: getAdditionalLabelInfo('collateralFeeInterval'),
+      initialValue: form.collateralFeeInterval,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'collateralFeeInterval',
+    },
   ]
 
   return (
     <>
+      <ProgramSelector
+        programSelectorHook={programSelectorHook}
+      ></ProgramSelector>
       {form && (
         <>
           <InstructionForm

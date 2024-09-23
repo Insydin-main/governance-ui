@@ -1,5 +1,4 @@
 import { ChevronRightIcon } from '@heroicons/react/solid'
-import { useGovernancePowerAsync } from '@hooks/queries/governancePower'
 import { useRealmConfigQuery } from '@hooks/queries/realmConfig'
 import useQueryContext from '@hooks/useQueryContext'
 import useWalletOnePointOh from '@hooks/useWalletOnePointOh'
@@ -7,6 +6,7 @@ import { GoverningTokenType } from '@solana/spl-governance'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import GovernancePowerForRole from './GovernancePowerForRole'
+import { useRealmVoterWeightPlugins } from '@hooks/useRealmVoterWeightPlugins'
 
 const GovernancePowerTitle = () => {
   const { symbol } = useRouter().query
@@ -29,20 +29,27 @@ const GovernancePowerTitle = () => {
     </div>
   )
 }
+/* 
+// TODO: refactor deposit components to their own generic DepositForRole component
+const VanillaDeposit = ({ role }: { role: 'community' | 'council' }) => {
+  const { connection } = useConnection()
+
+  const realmPk = useSelectedRealmPubkey()
+
+  const { result: kind } = useAsync(async () => {
+    if (realmPk === undefined) return undefined
+    return determineVotingPowerType(connection, realmPk, role)
+  }, [connection, realmPk, role])
+
+  return kind === 'vanilla' ? <Deposit role={role} /> : <></>
+} */
 
 const GovernancePowerCard = () => {
   const connected = useWalletOnePointOh()?.connected ?? false
 
-  const communityPower = useGovernancePowerAsync('community')
-  const councilPower = useGovernancePowerAsync('council')
-
-  const bothLoading = communityPower.loading && councilPower.loading
-
-  const bothZero =
-    communityPower.result !== undefined &&
-    councilPower.result !== undefined &&
-    communityPower.result.isZero() &&
-    councilPower.result.isZero()
+  const { isReady: communityIsReady } = useRealmVoterWeightPlugins('community')
+  const { isReady: councilIsReady } = useRealmVoterWeightPlugins('council')
+  const isReady = communityIsReady && councilIsReady
 
   const realmConfig = useRealmConfigQuery().data?.result
 
@@ -53,15 +60,11 @@ const GovernancePowerCard = () => {
         <div className={'text-xs text-white/50 mt-8'}>
           Connect your wallet to see governance power
         </div>
-      ) : bothLoading ? (
+      ) : !isReady ? (
         <>
           <div className="h-12 mb-4 rounded-lg animate-pulse bg-bkg-3" />
           <div className="h-10 rounded-lg animate-pulse bg-bkg-3" />
         </>
-      ) : bothZero ? (
-        <div className={'text-xs text-white/50 mt-8'}>
-          You do not have any governance power in this dao
-        </div>
       ) : (
         <div className="flex flex-col gap-2">
           {realmConfig?.account.communityTokenConfig.tokenType ===

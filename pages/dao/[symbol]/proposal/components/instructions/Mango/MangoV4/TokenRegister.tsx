@@ -16,16 +16,18 @@ import UseMangoV4 from '../../../../../../../../hooks/useMangoV4'
 import { toNative } from '@blockworks-foundation/mango-v4'
 import { BN } from '@coral-xyz/anchor'
 import useWalletOnePointOh from '@hooks/useWalletOnePointOh'
+import ForwarderProgram, {
+  useForwarderProgramHelpers,
+} from '@components/ForwarderProgram/ForwarderProgram'
+import { REDUCE_ONLY_OPTIONS } from '@utils/Mango/listingTools'
+import ProgramSelector from '@components/Mango/ProgramSelector'
+import useProgramSelector from '@components/Mango/useProgramSelector'
 
-const REDUCE_ONLY_OPTIONS = [
-  { value: 0, name: 'Disabled' },
-  { value: 1, name: 'No borrows and no deposits' },
-  { value: 2, name: 'No borrows' },
-]
 interface TokenRegisterForm {
   governedAccount: AssetAccount | null
   mintPk: string
   oraclePk: string
+  fallbackOracle: string
   oracleConfFilter: number
   maxStalenessSlots: string
   name: string
@@ -52,10 +54,19 @@ interface TokenRegisterForm {
   stablePriceDelayGrowthLimit: number
   tokenConditionalSwapTakerFeeRate: number
   tokenConditionalSwapMakerFeeRate: number
-  flashLoanDepositFeeRate: number
+  flashLoanSwapFeeRate: number
   reduceOnly: { name: string; value: number }
   borrowWeightScaleStartQuote: number
   depositWeightScaleStartQuote: number
+  interestCurveScaling: number
+  interestTargetUtilization: number
+  depositLimit: number
+  insuranceFound: boolean
+  zeroUtilRate: number
+  platformLiquidationFee: number
+  disableAssetLiquidation: boolean
+  collateralFeePerDay: number
+  tier: string
 }
 
 const TokenRegister = ({
@@ -66,8 +77,14 @@ const TokenRegister = ({
   governance: ProgramAccount<Governance> | null
 }) => {
   const wallet = useWalletOnePointOh()
-  const { mangoClient, mangoGroup, getAdditionalLabelInfo } = UseMangoV4()
+  const programSelectorHook = useProgramSelector()
+  const { mangoClient, mangoGroup, getAdditionalLabelInfo } = UseMangoV4(
+    programSelectorHook.program?.val,
+    programSelectorHook.program?.group
+  )
   const { assetAccounts } = useGovernanceAssets()
+  const forwarderProgramHelpers = useForwarderProgramHelpers()
+
   const solAccounts = assetAccounts.filter(
     (x) =>
       x.type === AccountType.SOL &&
@@ -80,6 +97,7 @@ const TokenRegister = ({
     mintPk: '',
     maxStalenessSlots: '',
     oraclePk: '',
+    fallbackOracle: '',
     oracleConfFilter: 0.1,
     name: '',
     adjustmentFactor: 0.004, // rate parameters are chosen to be the same for all high asset weight tokens,
@@ -105,10 +123,19 @@ const TokenRegister = ({
     stablePriceDelayGrowthLimit: 0.06,
     tokenConditionalSwapTakerFeeRate: 0,
     tokenConditionalSwapMakerFeeRate: 0,
-    flashLoanDepositFeeRate: 0,
+    flashLoanSwapFeeRate: 0,
     reduceOnly: REDUCE_ONLY_OPTIONS[0],
     borrowWeightScaleStartQuote: toNative(10000, 6).toNumber(),
     depositWeightScaleStartQuote: toNative(10000, 6).toNumber(),
+    depositLimit: 0,
+    interestTargetUtilization: 0.5,
+    interestCurveScaling: 4,
+    insuranceFound: false,
+    zeroUtilRate: 0,
+    platformLiquidationFee: 0,
+    disableAssetLiquidation: false,
+    collateralFeePerDay: 0,
+    tier: '',
   })
   const [formErrors, setFormErrors] = useState({})
   const { handleSetInstructions } = useContext(NewProposalContext)
@@ -160,10 +187,19 @@ const TokenRegister = ({
           new BN(form.netBorrowLimitPerWindowQuote),
           Number(form.borrowWeightScaleStartQuote),
           Number(form.depositWeightScaleStartQuote),
-          Number(form.reduceOnly),
+          Number(form.reduceOnly.value),
           Number(form.tokenConditionalSwapTakerFeeRate),
           Number(form.tokenConditionalSwapMakerFeeRate),
-          Number(form.flashLoanDepositFeeRate)
+          Number(form.flashLoanSwapFeeRate),
+          Number(form.interestCurveScaling),
+          Number(form.interestTargetUtilization),
+          form.insuranceFound,
+          new BN(form.depositLimit),
+          Number(form.zeroUtilRate),
+          Number(form.platformLiquidationFee),
+          form.disableAssetLiquidation,
+          Number(form.collateralFeePerDay),
+          form.tier
         )
         .accounts({
           group: mangoGroup!.publicKey,
@@ -172,10 +208,13 @@ const TokenRegister = ({
           oracle: new PublicKey(form.oraclePk),
           payer: form.governedAccount.extensions.transferAddress,
           rent: SYSVAR_RENT_PUBKEY,
+          fallbackOracle: new PublicKey(form.fallbackOracle),
         })
         .instruction()
 
-      serializedInstruction = serializeInstructionToBase64(ix)
+      serializedInstruction = serializeInstructionToBase64(
+        forwarderProgramHelpers.withForwarderWrapper(ix)
+      )
     }
     const obj: UiInstruction = {
       serializedInstruction: serializedInstruction,
@@ -193,7 +232,11 @@ const TokenRegister = ({
       index
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps -- TODO please fix, it can cause difficult bugs. You might wanna check out https://bobbyhadz.com/blog/react-hooks-exhaustive-deps for info. -@asktree
-  }, [form])
+  }, [
+    form,
+    forwarderProgramHelpers.form,
+    forwarderProgramHelpers.withForwarderWrapper,
+  ])
   const schema = yup.object().shape({
     governedAccount: yup
       .object()
@@ -253,6 +296,12 @@ const TokenRegister = ({
       initialValue: form.oraclePk,
       type: InstructionInputType.INPUT,
       name: 'oraclePk',
+    },
+    {
+      label: `Fallback oracle`,
+      initialValue: form.fallbackOracle,
+      type: InstructionInputType.INPUT,
+      name: 'fallbackOracle',
     },
     {
       label: `Oracle Confidence Filter`,
@@ -461,11 +510,11 @@ const TokenRegister = ({
     },
     {
       label: `Flash Loan Deposit Fee Rate`,
-      subtitle: getAdditionalLabelInfo('flashLoanDepositFeeRate'),
-      initialValue: form.flashLoanDepositFeeRate,
+      subtitle: getAdditionalLabelInfo('flashLoanSwapFeeRate'),
+      initialValue: form.flashLoanSwapFeeRate,
       type: InstructionInputType.INPUT,
       inputType: 'number',
-      name: 'flashLoanDepositFeeRate',
+      name: 'flashLoanSwapFeeRate',
     },
     {
       label: `Borrow Weight Scale Start Quote`,
@@ -483,10 +532,81 @@ const TokenRegister = ({
       inputType: 'number',
       name: 'depositWeightScaleStartQuote',
     },
+    {
+      label: `Interest Curve Scaling`,
+      subtitle: getAdditionalLabelInfo('interestCurveScaling'),
+      initialValue: form.interestCurveScaling,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'interestCurveScaling',
+    },
+    {
+      label: `Interest Target Utilization`,
+      subtitle: getAdditionalLabelInfo('interestTargetUtilization'),
+      initialValue: form.interestTargetUtilization,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'interestTargetUtilization',
+    },
+    {
+      label: `Deposit Limit`,
+      subtitle: getAdditionalLabelInfo('depositLimit'),
+      initialValue: form.depositLimit,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'depositLimit',
+    },
+    {
+      label: `Insurance Found`,
+      subtitle: getAdditionalLabelInfo('insuranceFound'),
+      initialValue: form.insuranceFound,
+      type: InstructionInputType.SWITCH,
+      name: 'insuranceFound',
+    },
+    {
+      label: 'Zero Util Rate',
+      subtitle: getAdditionalLabelInfo('zeroUtilRate'),
+      initialValue: form.zeroUtilRate,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'zeroUtilRate',
+    },
+    {
+      label: 'Platform Liquidation Fee',
+      subtitle: getAdditionalLabelInfo('platformLiquidationFee'),
+      initialValue: form.platformLiquidationFee,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'platformLiquidationFee',
+    },
+    {
+      label: 'Disable Asset Liquidation',
+      subtitle: getAdditionalLabelInfo('disableAssetLiquidation'),
+      initialValue: form.disableAssetLiquidation,
+      type: InstructionInputType.SWITCH,
+      name: 'disableAssetLiquidation',
+    },
+    {
+      label: 'Collateral Fee Per Day',
+      subtitle: getAdditionalLabelInfo('collateralFeePerDay'),
+      initialValue: form.collateralFeePerDay,
+      type: InstructionInputType.INPUT,
+      inputType: 'number',
+      name: 'collateralFeePerDay',
+    },
+    {
+      label: 'Token Tier',
+      initialValue: form.tier,
+      type: InstructionInputType.INPUT,
+      name: 'tier',
+    },
   ]
 
   return (
     <>
+      <ProgramSelector
+        programSelectorHook={programSelectorHook}
+      ></ProgramSelector>
       {form && (
         <InstructionForm
           outerForm={form}
@@ -496,6 +616,7 @@ const TokenRegister = ({
           formErrors={formErrors}
         ></InstructionForm>
       )}
+      <ForwarderProgram {...forwarderProgramHelpers}></ForwarderProgram>
     </>
   )
 }

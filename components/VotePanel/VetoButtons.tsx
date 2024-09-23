@@ -13,7 +13,7 @@ import {
 import { useProposalVoteRecordQuery } from '@hooks/queries/voteRecord'
 import { useSubmitVote } from '@hooks/useSubmitVote'
 import { useSelectedRealmInfo } from '@hooks/selectedRealm/useSelectedRealmRegistryEntry'
-import { useGovernancePowerAsync } from '@hooks/queries/governancePower'
+import { useRealmVoterWeightPlugins } from '@hooks/useRealmVoterWeightPlugins'
 
 const useIsVetoable = (): undefined | boolean => {
   const vetoingPop = useVetoingPop()
@@ -30,7 +30,9 @@ const useCanVeto = ():
   | { canVeto: true }
   | { canVeto: false; message: string } => {
   const vetoPop = useVetoingPop()
-  const { result: govPower } = useGovernancePowerAsync(vetoPop)
+  const { calculatedMaxVoterWeight, isReady } = useRealmVoterWeightPlugins(
+    vetoPop
+  )
   const wallet = useWalletOnePointOh()
   const connected = !!wallet?.connected
   const isVetoable = useIsVetoable()
@@ -53,7 +55,8 @@ const useCanVeto = ():
     return { canVeto: false, message: 'You already voted' }
 
   // Do you have any voting power?
-  const hasMinAmountToVote = voterTokenRecord && govPower?.gtn(0)
+  const hasMinAmountToVote =
+    voterTokenRecord && isReady && calculatedMaxVoterWeight?.value?.gtn(0)
   if (hasMinAmountToVote === undefined) return undefined
   if (hasMinAmountToVote === false)
     return {
@@ -71,7 +74,6 @@ const VetoButtons = () => {
   const vetoingPop = useVetoingPop()
   const canVeto = useCanVeto()
   const [openModal, setOpenModal] = useState(false)
-  const voterTokenRecord = useUserVetoTokenRecord()
   const { data: userVetoRecord } = useProposalVoteRecordQuery('veto')
   const { submitting, submitVote } = useSubmitVote()
 
@@ -81,15 +83,11 @@ const VetoButtons = () => {
     } else {
       submitVote({
         vote: VoteKind.Veto,
-        voterTokenRecord: voterTokenRecord!,
       })
     }
   }
 
-  return vetoable &&
-    vetoingPop &&
-    voterTokenRecord &&
-    !userVetoRecord?.found ? (
+  return vetoable && vetoingPop && !userVetoRecord?.found ? (
     <>
       <div className="bg-bkg-2 p-4 md:p-6 rounded-lg space-y-4">
         <div className="flex flex-col items-center justify-center">
@@ -116,7 +114,6 @@ const VetoButtons = () => {
         <VoteCommentModal
           onClose={() => setOpenModal(false)}
           isOpen={openModal}
-          voterTokenRecord={voterTokenRecord}
           vote={VoteKind.Veto}
         />
       ) : null}
